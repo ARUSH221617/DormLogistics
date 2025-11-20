@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -68,7 +67,9 @@ const App = () => {
     enabled: false,
     daysBefore: 0,
     time: "09:00",
-    taskTypes: ['Proxy Lunch', 'Proxy Dinner', 'Weekend Prep']
+    taskTypes: ['Proxy Lunch', 'Proxy Dinner', 'Weekend Prep'],
+    email: '',
+    emailEnabled: false
   });
   const notifiedTasksRef = useRef<Set<string>>(new Set());
   const notificationDropdownRef = useRef<HTMLDivElement>(null);
@@ -395,6 +396,12 @@ const App = () => {
           setNotifications(prev => [newNotification, ...prev]);
           notifiedTasksRef.current.add(task.id);
           sendBrowserNotification(title, message);
+
+          // Email Notification Logic (Simulated)
+          if (reminderSettings.emailEnabled && reminderSettings.email) {
+            console.log(`[EMAIL SENT] To: ${reminderSettings.email}\nSubject: ${title}\nBody: ${message}`);
+            // In a real application, you would trigger an API call to your backend email service here
+          }
         }
       });
     });
@@ -621,6 +628,7 @@ const App = () => {
               onGenerateAI={generateScheduleAI}
               isGenerating={isGeneratingSchedule}
               currentUser={currentUser} 
+              weekendMenus={weekendMenus}
             />
           )}
           {activeTab === 'expenses' && (
@@ -654,6 +662,7 @@ const App = () => {
               members={members} 
               homeVisits={homeVisits} 
               setHomeVisits={setHomeVisits} 
+              currentUser={currentUser}
             />
           )}
         </div>

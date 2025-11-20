@@ -83,6 +83,8 @@ export interface ReminderSettings {
   daysBefore: number;
   time: string;
   taskTypes: string[];
+  email?: string;
+  emailEnabled?: boolean;
 }
 
 export type Role = 'admin' | 'user';

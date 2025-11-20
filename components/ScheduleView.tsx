@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
-import { Filter, X, Calendar, Utensils, Moon, Coffee, ChefHat, CheckCircle2, Circle, Zap, Sparkles, Loader2 } from 'lucide-react';
-import { DaySchedule, Member, DayOfWeek, User } from '../types';
+import { Filter, X, Calendar, Utensils, Moon, Coffee, ChefHat, CheckCircle2, Circle, Zap, Sparkles, Loader2, ArrowRight, BookOpen } from 'lucide-react';
+import { DaySchedule, Member, DayOfWeek, User, Recipe } from '../types';
 import { DAYS } from '../utils';
 import { Card } from './Card';
 
@@ -13,10 +12,11 @@ interface ScheduleViewProps {
   onGenerateAI: () => void;
   isGenerating: boolean;
   currentUser: User;
+  weekendMenus: Record<string, Recipe>;
 }
 
 export const ScheduleView: React.FC<ScheduleViewProps> = ({ 
-  schedule, setSchedule, members, onGenerate, onGenerateAI, isGenerating, currentUser 
+  schedule, setSchedule, members, onGenerate, onGenerateAI, isGenerating, currentUser, weekendMenus 
 }) => {
   const [selectedDay, setSelectedDay] = useState<DayOfWeek | 'All'>('All');
   const [filterTaskType, setFilterTaskType] = useState<string>('All');
@@ -35,6 +35,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
     })));
   };
 
+  // --- Filter Logic for Main Grid ---
   const filteredSchedule = schedule
     .map(day => ({
       ...day,
@@ -51,8 +52,113 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
 
   const isFiltered = selectedDay !== 'All' || filterTaskType !== 'All' || filterAssignee !== 'All';
 
+  // --- Logic for "My Upcoming Tasks" ---
+  const myUpcomingTasks = schedule.flatMap(day => 
+    day.tasks
+      .filter(t => t.assigneeId === currentUser.memberId && !t.completed)
+      .map(t => ({ ...t, dayDisplay: day.displayDate, dayName: day.dayOfWeek, isoDate: day.isoDate }))
+  ).sort((a, b) => a.isoDate.localeCompare(b.isoDate));
+
+  // --- Logic for "Weekend Menus" Display ---
+  // Iterate through schedule to find days with weekend prep, and check if we have a menu
+  const plannedMenus = schedule.flatMap(day => 
+    day.tasks
+      .filter(t => t.type === 'Weekend Prep' && weekendMenus[`${day.date}-${t.assigneeId}`])
+      .map(t => ({
+         day: day,
+         task: t,
+         menu: weekendMenus[`${day.date}-${t.assigneeId}`],
+         chef: members.find(m => m.id === t.assigneeId)?.name || 'Unknown'
+      }))
+  );
+
   return (
     <div className="space-y-6">
+      
+      {/* My Assignments & Weekend Menus Row */}
+      {schedule.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          
+          {/* My Assignments Section */}
+          <Card className="p-5 border-l-4 border-indigo-500">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <span className="p-1.5 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400">
+                 <CheckCircle2 className="w-4 h-4" />
+              </span>
+              My Upcoming Tasks
+            </h3>
+            {myUpcomingTasks.length === 0 ? (
+              <div className="text-center py-6 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-dashed border-gray-200 dark:border-gray-700">
+                <p className="text-gray-500 dark:text-gray-400 text-sm">You have no pending tasks!</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
+                {myUpcomingTasks.map(task => (
+                   <div key={task.id} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-lg shadow-sm hover:shadow-md transition-all">
+                      <div className="flex items-center gap-3 overflow-hidden">
+                         <div className="flex flex-col items-center justify-center min-w-[3rem] px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-center">
+                            <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400">{task.dayName}</span>
+                            <span className="text-xs font-bold text-gray-900 dark:text-white">{task.dayDisplay?.split(' ')[1]}</span>
+                         </div>
+                         <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{task.type}</p>
+                            {task.note && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{task.note}</p>}
+                         </div>
+                      </div>
+                      <button 
+                        onClick={() => toggleTaskCompletion(task.id)}
+                        className="shrink-0 p-2 text-gray-300 hover:text-green-500 transition-colors"
+                        title="Mark Complete"
+                      >
+                         <Circle className="w-5 h-5" />
+                      </button>
+                   </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* Weekend Menus Section */}
+          <Card className="p-5 border-l-4 border-purple-500">
+             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+               <span className="p-1.5 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-purple-600 dark:text-purple-400">
+                  <ChefHat className="w-4 h-4" />
+               </span>
+               Weekend Menus
+             </h3>
+             {plannedMenus.length === 0 ? (
+                <div className="text-center py-6 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-dashed border-gray-200 dark:border-gray-700">
+                   <p className="text-gray-500 dark:text-gray-400 text-sm">No menus generated yet.</p>
+                   <p className="text-xs text-gray-400 mt-1">Visit the "Weekend" tab to plan meals.</p>
+                </div>
+             ) : (
+                <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
+                   {plannedMenus.map((item, idx) => (
+                      <div key={idx} className="group relative p-3 bg-purple-50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-800/30 rounded-lg">
+                         <div className="flex justify-between items-start">
+                            <div>
+                               <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-xs font-bold bg-white dark:bg-purple-900 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded border border-purple-200 dark:border-purple-700">
+                                     {item.day.displayDate}
+                                  </span>
+                                  <span className="text-xs text-gray-500 dark:text-gray-400">Chef: {item.chef}</span>
+                               </div>
+                               <h4 className="font-bold text-gray-900 dark:text-white text-sm">{item.menu.dishName}</h4>
+                            </div>
+                            <BookOpen className="w-4 h-4 text-purple-400" />
+                         </div>
+                         <p className="text-xs text-gray-600 dark:text-gray-300 mt-2 italic line-clamp-2">
+                            "{item.menu.reasoning}"
+                         </p>
+                      </div>
+                   ))}
+                </div>
+             )}
+          </Card>
+
+        </div>
+      )}
+
       <Card className="p-4">
         <div className="flex flex-col gap-4">
            {/* Header and Day Filters */}

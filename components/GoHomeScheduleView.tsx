@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Home, Plus, Trash2, Calendar, ArrowRight } from 'lucide-react';
-import { Member, HomeVisit } from '../types';
+import { Member, HomeVisit, User } from '../types';
 import { generateId } from '../utils';
 import { Card } from './Card';
 
@@ -9,29 +9,55 @@ interface GoHomeScheduleViewProps {
   members: Member[];
   homeVisits: HomeVisit[];
   setHomeVisits: React.Dispatch<React.SetStateAction<HomeVisit[]>>;
+  currentUser: User;
 }
 
-export const GoHomeScheduleView: React.FC<GoHomeScheduleViewProps> = ({ members, homeVisits, setHomeVisits }) => {
+export const GoHomeScheduleView: React.FC<GoHomeScheduleViewProps> = ({ members, homeVisits, setHomeVisits, currentUser }) => {
+  const isAdmin = currentUser.role === 'admin';
   const [isLoggingVisit, setIsLoggingVisit] = useState(false);
+  
+  // Initialize with intelligent defaults
   const [newVisit, setNewVisit] = useState<Partial<HomeVisit>>({ 
-    memberId: members[0]?.id, 
+    memberId: isAdmin ? (members[0]?.id || '') : currentUser.memberId, 
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date(Date.now() + 86400000).toISOString().split('T')[0], 
     reason: 'Weekend Home' 
   });
 
+  // Reset member selection when opening modal or switching users
+  useEffect(() => {
+    if (isLoggingVisit) {
+       setNewVisit(prev => ({
+          ...prev,
+          memberId: isAdmin ? (prev.memberId || members[0]?.id) : currentUser.memberId
+       }));
+    }
+  }, [isLoggingVisit, isAdmin, currentUser.memberId, members]);
+
   const addVisit = () => {
-    if(!newVisit.memberId || !newVisit.startDate || !newVisit.endDate) return;
+    // Enforce permission logic: Admins can set for anyone, Users only for themselves
+    const finalMemberId = isAdmin ? newVisit.memberId : currentUser.memberId;
+    
+    if(!finalMemberId || !newVisit.startDate || !newVisit.endDate) return;
+    
     const visit: HomeVisit = {
       ...newVisit as HomeVisit,
-      id: generateId()
+      id: generateId(),
+      memberId: finalMemberId
     };
     setHomeVisits([...homeVisits, visit]);
     setIsLoggingVisit(false);
   };
 
   const deleteVisit = (id: string) => {
-    setHomeVisits(homeVisits.filter(h => h.id !== id));
+    const visit = homeVisits.find(v => v.id === id);
+    if (!visit) return;
+
+    if (isAdmin || visit.memberId === currentUser.memberId) {
+      setHomeVisits(homeVisits.filter(h => h.id !== id));
+    } else {
+      alert("You can only remove your own visits.");
+    }
   };
 
   const sortedVisits = [...homeVisits].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
@@ -61,13 +87,22 @@ export const GoHomeScheduleView: React.FC<GoHomeScheduleViewProps> = ({ members,
               <div className="space-y-4">
                  <div>
                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Member</label>
-                   <select 
-                     value={newVisit.memberId} 
-                     onChange={e => setNewVisit({...newVisit, memberId: e.target.value})}
-                     className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white"
-                   >
-                     {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                   </select>
+                   {isAdmin ? (
+                     <select 
+                        value={newVisit.memberId} 
+                        onChange={e => setNewVisit({...newVisit, memberId: e.target.value})}
+                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white"
+                     >
+                        {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                     </select>
+                   ) : (
+                     <div className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-500 dark:text-gray-400 cursor-not-allowed">
+                        {members.find(m => m.id === currentUser.memberId)?.name || 'You'}
+                     </div>
+                   )}
+                   {!isAdmin && (
+                      <p className="text-[10px] text-gray-400 mt-1">Regular users can only log visits for themselves.</p>
+                   )}
                  </div>
                  <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -119,6 +154,7 @@ export const GoHomeScheduleView: React.FC<GoHomeScheduleViewProps> = ({ members,
               const member = members.find(m => m.id === visit.memberId);
               const isPast = new Date(visit.endDate) < new Date();
               const isCurrent = new Date(visit.startDate) <= new Date() && new Date(visit.endDate) >= new Date();
+              const canDelete = isAdmin || visit.memberId === currentUser.memberId;
 
               return (
                 <Card key={visit.id} className={`p-4 flex items-center justify-between ${isPast ? 'opacity-60 bg-gray-50 dark:bg-gray-800/50' : ''}`}>
@@ -144,12 +180,14 @@ export const GoHomeScheduleView: React.FC<GoHomeScheduleViewProps> = ({ members,
                          {visit.reason && <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">"{visit.reason}"</p>}
                       </div>
                    </div>
-                   <button 
-                     onClick={() => deleteVisit(visit.id)}
-                     className="text-gray-400 hover:text-red-500 p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"
-                   >
-                     <Trash2 className="w-4 h-4" />
-                   </button>
+                   {canDelete && (
+                       <button 
+                        onClick={() => deleteVisit(visit.id)}
+                        className="text-gray-400 hover:text-red-500 p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"
+                       >
+                        <Trash2 className="w-4 h-4" />
+                       </button>
+                   )}
                 </Card>
               );
            })
